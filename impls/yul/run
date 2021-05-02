@@ -1,0 +1,4 @@
+#!/bin/bash
+# exec $(dirname $0)/${STEP:-stepA_mal} "${@}"
+
+# exec solc --strict-assembly --optimize --yul-dialect evm --machine ewasm build/contract1.yul
