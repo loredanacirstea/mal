@@ -5,7 +5,7 @@ import LeanMal.reader
 
 universe u
 
-def sum (env : Env) (lst: List Types) : IO (Env × Types) := do
+def sum (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   match lst with
   | []                                   => return (env, Types.intVal 0)
   | [Types.intVal x]                     => return (env, Types.intVal x)
@@ -14,7 +14,7 @@ def sum (env : Env) (lst: List Types) : IO (Env × Types) := do
   | [Types.floatVal x, Types.floatVal y] => return (env, Types.floatVal (x + y))
   | _                                    => throw (IO.userError "+ operator not supported")
 
-def sub (env : Env) (lst: List Types) : IO (Env × Types) := do
+def sub (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   match lst with
   | []                                   => return (env, Types.intVal 0)
   | [Types.intVal x]                     => return (env, Types.intVal x)
@@ -23,7 +23,7 @@ def sub (env : Env) (lst: List Types) : IO (Env × Types) := do
   | [Types.floatVal x, Types.floatVal y] => return (env, Types.floatVal (x - y))
   | _                                    => throw (IO.userError "- operator not supported")
 
-def mul (env : Env) (lst: List Types) : IO (Env × Types) := do
+def mul (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   match lst with
   | []                                   => return (env, Types.intVal 0)
   | [Types.intVal x]                     => return (env, Types.intVal x)
@@ -32,7 +32,7 @@ def mul (env : Env) (lst: List Types) : IO (Env × Types) := do
   | [Types.floatVal x, Types.floatVal y] => return (env, Types.floatVal (x * y))
   | _                                    => throw (IO.userError "* operator not supported")
 
-def div (env : Env) (lst: List Types) : IO (Env × Types) := do
+def div (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   match lst with
   | []                                   => return (env, Types.intVal 0)
   | [Types.intVal x]                     => return (env, Types.intVal x)
@@ -50,7 +50,7 @@ def ltInternal (first: Types) (second: Types) (orEq: Bool) : Bool :=
   | Types.strVal n, Types.strVal v => n < v || (if orEq then n == v else false)
   | _, _ => false
 
-def lt (env : Env) (lst: List Types) : IO (Env × Types) := do
+def lt (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 2 then throw (IO.userError "eq: 2 arguments required")
   else
     let first := lst[0]!
@@ -58,7 +58,7 @@ def lt (env : Env) (lst: List Types) : IO (Env × Types) := do
     let res := ltInternal first second false
     return (env, Types.boolVal res)
 
-def lte (env : Env) (lst: List Types) : IO (Env × Types) := do
+def lte (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 2 then throw (IO.userError "eq: 2 arguments required")
   else
     let first := lst[0]!
@@ -75,7 +75,7 @@ def gtInternal (first: Types) (second: Types) (orEq: Bool) : Bool :=
   | Types.strVal n, Types.strVal v => n > v || (if orEq then n == v else false)
   | _, _ => false
 
-def gt (env : Env) (lst: List Types) : IO (Env × Types) := do
+def gt (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 2 then throw (IO.userError "eq: 2 arguments required")
   else
     let first := lst[0]!
@@ -83,7 +83,7 @@ def gt (env : Env) (lst: List Types) : IO (Env × Types) := do
     let res := gtInternal first second false
     return (env, Types.boolVal res)
 
-def gte (env : Env) (lst: List Types) : IO (Env × Types) := do
+def gte (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 2 then throw (IO.userError "eq: 2 arguments required")
   else
     let first := lst[0]!
@@ -150,7 +150,7 @@ mutual
 
 end
 
-def eq (env : Env) (lst: List Types) (strict: Bool) : IO (Env × Types) := do
+def eq (env: IO.Ref Env) (lst: List Types) (strict: Bool) : IO (IO.Ref Env × Types) := do
   if lst.length < 2 then throw (IO.userError "eq: 2 arguments required")
   else
     let first := lst[0]!
@@ -158,13 +158,13 @@ def eq (env : Env) (lst: List Types) (strict: Bool) : IO (Env × Types) := do
     let res := eqInternal first second strict
     return (env, Types.boolVal res)
 
-def makeAtom (env : Env) (lst: List Types) : IO (Env × Types) := do
+def makeAtom (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 1 then throw (IO.userError "keyword: 1 argument required")
   else
     let first := lst[0]!
     return (env, Types.atomVal (Atom.v first))
 
-def derefAtom (env : Env) (lst: List Types) : IO (Env × Types) := do
+def derefAtom (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 1 then throw (IO.userError "deref: 1 argument required")
   else
     let first := lst[0]!
@@ -174,7 +174,7 @@ def derefAtom (env : Env) (lst: List Types) : IO (Env × Types) := do
       | Atom.withmeta v _ => return (env, v)
     | x => throw (IO.userError s!"deref: unexpected symbol: {x.toString true}, expected: atom")
 
-def resetAtom (env : Env) (lst: List Types) (args: List Types) : IO (Env × Types) := do
+def resetAtom (env: IO.Ref Env) (lst: List Types) (args: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 2 then throw (IO.userError "reset!: 2 argument required")
   else
     let first := lst[0]!
@@ -182,16 +182,16 @@ def resetAtom (env : Env) (lst: List Types) (args: List Types) : IO (Env × Type
     let atomSymbol := args[0]!
     match atomSymbol with
     | Types.symbolVal sym =>
-      match env.get (KeyType.strKey sym) with
+      match (← unwrapEnv env).get (KeyType.strKey sym) with
       | none => throw (IO.userError s!"{sym} not found")
       | some (level, _) => match first with
         | Types.atomVal x => match x with
           | Atom.v _ =>
-              let newEnv := env.add (KeyType.strKey sym) level (Types.atomVal (Atom.v second))
-              return (newEnv, second)
+              let newEnv := (← unwrapEnv env).add (KeyType.strKey sym) level (Types.atomVal (Atom.v second))
+              return (← wrapEnv newEnv, second)
           | Atom.withmeta _ meta =>
-              let newEnv := env.add (KeyType.strKey sym) level (Types.atomVal (Atom.withmeta second meta))
-              return (newEnv, second)
+              let newEnv := (← unwrapEnv env).add (KeyType.strKey sym) level (Types.atomVal (Atom.withmeta second meta))
+              return (← wrapEnv newEnv, second)
         | x => throw (IO.userError s!"reset!: unexpected symbol: {x.toString true}, expected: atom")
     | x => throw (IO.userError s!"reset!: unexpected token: {x.toString true}, expected: symbol")
 
@@ -201,33 +201,33 @@ def prStrInternal (lst: List Types) (printReadably: Bool) (sep: String) : String
 
 def KEY_DEBUG_EVAL := "DEBUG-EVAL"
 
-def getDebugEval (env : Env): Bool :=
-  match env.get (KeyType.strKey KEY_DEBUG_EVAL) with
+def getDebugEval (env: IO.Ref Env): IO Bool := do
+  match (← unwrapEnv env).get (KeyType.strKey KEY_DEBUG_EVAL) with
     | some (_, v) => match v with
-      | Types.boolVal v => v
-      | Types.Nil => false
-      | _ => false
-    | _ => false
+      | Types.boolVal v => return v
+      | Types.Nil => return false
+      | _ => return false
+    | _ => return false
 
-def prStrFunc (env : Env) (lst: List Types) : IO (Env × Types) := do
+def prStrFunc (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   let str := prStrInternal lst true " "
   return (env, Types.strVal str)
 
-def prnFunc (env : Env) (lst: List Types) : IO (Env × Types) := do
+def prnFunc (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   let str := prStrInternal lst true " "
   IO.println str
   return (env, Types.Nil)
 
-def printlnFunc (env : Env) (lst: List Types) : IO (Env × Types) := do
+def printlnFunc (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   let str := prStrInternal lst false " "
   IO.println str
   return (env, Types.Nil)
 
-def strFunc (env : Env) (lst: List Types) : IO (Env × Types) := do
+def strFunc (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   let str := prStrInternal lst false ""
   return (env, Types.strVal str)
 
-def countFunc(env : Env) (lst: List Types) : IO (Env × Types) := do
+def countFunc(env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 1 then throw (IO.userError "count: 1 argument required")
   else
     let x := lst[0]!
@@ -247,7 +247,7 @@ def readString (lst: List Types) (envir: Env) : IO Types := do
       | Except.ok res => return res
     | x => throw (IO.userError s!"unexpected symbol: {x.toString true}, expected: string")
 
-def cons (env : Env) (lst: List Types) : IO (Env × Types) := do
+def cons (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 2 then throw (IO.userError "cons: >= 2 arguments required")
   else
     let elem := lst[0]!
@@ -257,7 +257,7 @@ def cons (env : Env) (lst: List Types) : IO (Env × Types) := do
     | Types.vecVal v => return (env, (Types.listVal (elem :: (toList v))))
     | x => throw (IO.userError s!"unexpected symbol: {x.toString true}, expected: list or vector")
 
-def concat (env : Env) (lst: List Types) : IO (Env × Types) := do
+def concat (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 1 then return (env, Types.listVal [])
   else
     let v ← lst.foldlM (fun (acc: List Types) x =>
@@ -269,7 +269,7 @@ def concat (env : Env) (lst: List Types) : IO (Env × Types) := do
     return (env, Types.listVal v)
 
 
-def makeVec (env : Env) (lst: List Types) : IO (Env × Types) := do
+def makeVec (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 1 then throw (IO.userError "vec: 1 arguments required")
   else
     let first := lst[0]!
@@ -278,7 +278,7 @@ def makeVec (env : Env) (lst: List Types) : IO (Env × Types) := do
     | Types.listVal v => return (env, Types.vecVal (listToVec v))
     | x => throw (IO.userError s!"unexpected symbol: {x.toString true}, expected: list or vector")
 
-def nthSeq (env : Env) (lst: List Types) : IO (Env × Types) := do
+def nthSeq (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 2 then throw (IO.userError "nth: >= 2 arguments required")
   else
     let first := lst[0]!
@@ -300,7 +300,7 @@ def nthSeq (env : Env) (lst: List Types) : IO (Env × Types) := do
       | x => throw (IO.userError s!"unexpected symbol: {x.toString true}, expected: list or vector")
     | x => throw (IO.userError s!"unexpected symbol: {x.toString true}, expected: number")
 
-def firstSeq (env : Env) (lst: List Types) : IO (Env × Types) := do
+def firstSeq (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 1 then throw (IO.userError "first: 1 arguments required")
   else
     let first := lst[0]!
@@ -319,7 +319,7 @@ def firstSeq (env : Env) (lst: List Types) : IO (Env × Types) := do
         return (env, elem)
     | x => throw (IO.userError s!"unexpected symbol: {x.toString true}, expected: list or vector")
 
-def restSeq (env : Env) (lst: List Types) : IO (Env × Types) := do
+def restSeq (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 1 then throw (IO.userError "rest: 1 arguments required")
   else
     let first := lst[0]!
@@ -336,7 +336,7 @@ def restSeq (env : Env) (lst: List Types) : IO (Env × Types) := do
         return (env, Types.listVal (lv.drop 1))
     | x => throw (IO.userError s!"unexpected symbol: {x.toString true}, expected: list or vector")
 
-def makeVector (env : Env) (lst: List Types) : IO (Env × Types) := do
+def makeVector (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   return (env, Types.vecVal (listToVec lst))
 
 def makeDictInternal (initialDict : Dict) (lst: List Types) : IO (Dict) := do
@@ -353,11 +353,11 @@ def makeDictInternal (initialDict : Dict) (lst: List Types) : IO (Dict) := do
   let (v, _) ← loop lst [] initialDict
   return v
 
-def makeDict (env : Env) (lst: List Types) : IO (Env × Types) := do
+def makeDict (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   let newDict ← makeDictInternal Dict.empty lst
   return (env, Types.dictVal newDict)
 
-def assocDict (env : Env) (lst: List Types) : IO (Env × Types) := do
+def assocDict (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 1 then throw (IO.userError "assoc: >= 1 arguments required")
   else
     let first := lst[0]!
@@ -383,7 +383,7 @@ def dissoc (dict : Dict) (keys : List Types) : IO Dict :=
       | x => throw (IO.userError s!"unexpected symbol: {x.toString true}, expected: keyword or string")
   loop keys dict
 
-def dissocDict (env : Env) (lst: List Types) : IO (Env × Types) := do
+def dissocDict (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 1 then throw (IO.userError "dissoc: >= 1 arguments required")
   else
     let first := lst[0]!
@@ -394,7 +394,7 @@ def dissocDict (env : Env) (lst: List Types) : IO (Env × Types) := do
       return (env, Types.dictVal newDict)
     | x => throw (IO.userError s!"unexpected symbol: {x.toString true}, expected: hash-map")
 
-def getDict (env : Env) (lst: List Types) : IO (Env × Types) := do
+def getDict (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 1 then throw (IO.userError "get: >= 1 arguments required")
   else
     let first := lst[0]!
@@ -417,7 +417,7 @@ def getDict (env : Env) (lst: List Types) : IO (Env × Types) := do
     | Types.Nil => return (env, Types.Nil)
     | x => throw (IO.userError s!"unexpected symbol: {x.toString true}, expected: hash-map")
 
-def containsDict (env : Env) (lst: List Types) : IO (Env × Types) := do
+def containsDict (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 1 then throw (IO.userError "contains?: >= 1 arguments required")
   else
     let first := lst[0]!
@@ -440,7 +440,7 @@ def containsDict (env : Env) (lst: List Types) : IO (Env × Types) := do
     | Types.Nil => return (env, Types.boolVal false)
     | x => throw (IO.userError s!"unexpected symbol: {x.toString true}, expected: hash-map")
 
-def getKeysDict (env : Env) (lst: List Types) : IO (Env × Types) := do
+def getKeysDict (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 1 then throw (IO.userError "keys: 1 arguments required")
   else
     let first := lst[0]!
@@ -455,7 +455,7 @@ def getKeysDict (env : Env) (lst: List Types) : IO (Env × Types) := do
       return (env, (Types.listVal result))
     | x => throw (IO.userError s!"unexpected symbol: {x.toString true}, expected: hash-map")
 
-def getValuesDict (env : Env) (lst: List Types) : IO (Env × Types) := do
+def getValuesDict (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 1 then throw (IO.userError "get: 1 arguments required")
   else
     let first := lst[0]!
@@ -465,7 +465,7 @@ def getValuesDict (env : Env) (lst: List Types) : IO (Env × Types) := do
       return (env, (Types.listVal values))
     | x => throw (IO.userError s!"unexpected symbol: {x.toString true}, expected: hash-map")
 
-def makeSymbol (env : Env) (lst: List Types) : IO (Env × Types) := do
+def makeSymbol (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 1 then throw (IO.userError "symbol: 1 argument required")
   else
     let first := lst[0]!
@@ -474,7 +474,7 @@ def makeSymbol (env : Env) (lst: List Types) : IO (Env × Types) := do
     | Types.strVal v => return (env, Types.symbolVal v)
     | x => throw (IO.userError s!"symbol: unexpected symbol: {x.toString true}, expected: string")
 
-def makeKeyword (env : Env) (lst: List Types) : IO (Env × Types) := do
+def makeKeyword (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 1 then throw (IO.userError "keyword: 1 argument required")
   else
     let first := lst[0]!
@@ -483,7 +483,7 @@ def makeKeyword (env : Env) (lst: List Types) : IO (Env × Types) := do
     | Types.strVal v => return (env, Types.keywordVal v)
     | x => throw (IO.userError s!"keyword: unexpected symbol: {x.toString true}, expected: string")
 
-def conj (env : Env) (lst: List Types) : IO (Env × Types) := do
+def conj (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 1 then throw (IO.userError "conj: >= 1 arguments required")
   else
     let first := lst[0]!
@@ -493,7 +493,7 @@ def conj (env : Env) (lst: List Types) : IO (Env × Types) := do
     | Types.vecVal v => return (env, Types.vecVal (listToVec ((toList v) ++ rest)))
     | x => throw (IO.userError s!"unexpected symbol: {x.toString true}, expected: list or vector")
 
-def seq (env : Env) (lst: List Types) : IO (Env × Types) := do
+def seq (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 1 then throw (IO.userError "conj: 1 arguments required")
   else
     let first := lst[0]!
@@ -510,7 +510,7 @@ def seq (env : Env) (lst: List Types) : IO (Env × Types) := do
         return (env, Types.listVal lv)
     | x => throw (IO.userError s!"unexpected symbol: {x.toString true}, expected: list, vector or string")
 
-partial def throwFn (_ : Env) (lst : List Types) : IO (Env × Types) := do
+partial def throwFn (_ : Env) (lst : List Types) : IO (IO.Ref Env × Types) := do
     if lst.length < 1 then throw (IO.userError "panic")
     else
       let a := lst[0]!
@@ -521,7 +521,7 @@ partial def throwFn (_ : Env) (lst : List Types) : IO (Env × Types) := do
 def readFileContent (filePath : String) : IO String := do
   IO.FS.readFile filePath
 
-def slurp (env : Env) (lst: List Types) : IO (Env × Types) := do
+def slurp (env: IO.Ref Env) (lst: List Types) : IO (IO.Ref Env × Types) := do
   if lst.length < 1 then
     throw (IO.userError "slurp: 2 arguments required")
   else
@@ -535,10 +535,10 @@ def slurp (env : Env) (lst: List Types) : IO (Env × Types) := do
     | _ =>
       throw (IO.userError "slurp: filename must be a string")
 
-def loadFnNative (env : Env) (name: String) : Env :=
-  env.add (KeyType.strKey name) 0 (Types.funcVal (Fun.builtin name))
+def loadFnNative (env: Env) (name: String) : Env :=
+    env.add (KeyType.strKey name) 0 (Types.funcVal (Fun.builtin name))
 
-def loadFnNativeFold (env : Env) (fnNames : List String) : Env :=
+def loadFnNativeFold (env: Env) (fnNames : List String) : Env :=
   fnNames.foldl loadFnNative env
 
 def coreFnSymbols: List String := [
@@ -562,12 +562,12 @@ def coreFnSymbols: List String := [
   "time-ms", "meta", "with-meta"
 ]
 
-def loadFnNativeAll (env : Env) : Env :=
-  (
+def loadFnNativeAll (env: Env) : Env :=
+  ((
     loadFnNativeFold env coreFnSymbols
-  ).add (KeyType.strKey KEY_DEBUG_EVAL) 0 (Types.boolVal false)
+  ).add (KeyType.strKey KEY_DEBUG_EVAL) 0 (Types.boolVal false))
 
-def setSymbol (env : Env) (name: String) (value: Types): Env :=
+def setSymbol (env: Env) (name: String) (value: Types): Env :=
   env.add (KeyType.strKey name) 0 value
 
 -- forward mutated atoms defined in the outer environments

@@ -181,6 +181,12 @@ def Env.getDict : Env → Dict
 def Env.get : Env → KeyType → Option (Nat × Types)
   | Env.data _ d, key => d.get key
 
+def Env.getByStr : Env → String → Option (Nat × Types)
+  | Env.data _ d, key => d.get (KeyType.strKey key)
+
+def Env.getByKeyword : Env → String → Option (Nat × Types)
+  | Env.data _ d, key => d.get (KeyType.keywordKey key)
+
 def Env.keys : Env → List KeyType
   | Env.data _ d => d.keys
 
@@ -286,3 +292,13 @@ end
 def Env.toString (readably: Bool) (e:Env) : String :=
   match e with
   | Env.data l d => s!"level: {l} dict: {d.toStringWithLevels readably}"
+
+def unwrapEnv (envRef : IO.Ref Env) : IO Env :=
+  envRef.get
+
+def wrapEnv (env: Env) : IO (IO.Ref Env) :=
+  IO.mkRef env
+
+def wrapEnvIO (ioEnv : IO Env) : IO (IO.Ref Env) := do
+  let env ← ioEnv
+  IO.mkRef env
