@@ -41,7 +41,7 @@ mutual
     let (env2, fn) ← evalTypes env head
     let (fenv, res) ← evalFuncVal env2 fn args
     -- after executing a function, propagate atoms (defined in outer environments) to the parent scope
-    -- return ((forwardMutatedAtoms fenv env), res) -- TODO
+    return ((forwardMutatedAtoms fenv env), res) -- TODO
     return (env, res)
 
   partial def evalFuncVal (env: IO.Ref Env) (fn: Types) (args: List Types) : IO (IO.Ref Env × Types) := do
