@@ -31,45 +31,44 @@ inductive KeyType
     | keywordKey : String → KeyType
     deriving Repr
 
-mutual
+inductive Types : Type u
+  | strVal (v : String)
+  | intVal (v : Int)
+  | floatVal (v : Float)
+  | boolVal (v : Bool)
+  | symbolVal (sym: String)
+  | keywordVal (key: String)
+  | listVal (el : List Types)
+  | funcVal (el: Fun)
+  | vecVal {n : Nat} (el : Vec Types n)
+  | dictVal (el : Dict)
+  | atomVal (el: Atom)
+  | Nil
+  -- deriving Repr
 
-  inductive Types : Type u
-    | strVal (v : String)
-    | intVal (v : Int)
-    | floatVal (v : Float)
-    | boolVal (v : Bool)
-    | symbolVal (sym: String)
-    | keywordVal (key: String)
-    | listVal (el : List Types)
-    | funcVal (el: Fun)
-    | vecVal {n : Nat} (el : Vec Types n)
-    | dictVal (el : Dict)
-    | atomVal (el: Atom)
-    | Nil
-    deriving Repr
+inductive Fun : Type u
+  | builtin (name : String)
+  | userDefined (env: Env) (params : Types) (body : Types)
+  | macroFn (env: Env) (params : Types) (body : Types)
 
-  inductive Fun : Type u
-    | builtin (name : String)
-    | userDefined (env: Env) (params : Types) (body : Types)
-    | macroFn (env: Env) (params : Types) (body : Types)
+inductive Dict: Type u
+  | empty : Dict
+  | insert: KeyType → Types → Dict → Dict
+  -- deriving Repr
 
-  inductive Dict: Type u
-    | empty : Dict
-    | insert: KeyType → Nat → Types → Dict → Dict
-    deriving Repr
+structure Env where
+  data : IO.Ref Dict
+  outer : List (IO.Ref Dict)
 
-  inductive Env: Type u
-  | data: Nat → Dict → Env
+inductive Atom
+| v : Types -> Atom
+| withmeta : Types → Types → Atom
+-- deriving Repr
 
-  inductive Atom
-  | v : Types -> Atom
-  | withmeta : Types → Types → Atom
-  deriving Repr
 
-end
-
-instance : Inhabited Env where
-  default := Env.data 0 Dict.empty
+def defaultEnv : IO Env := do
+  let ref ← IO.mkRef Dict.empty
+  pure { data := ref, outer := [] }
 
 instance : Inhabited Dict where
   default := Dict.empty
@@ -83,60 +82,60 @@ instance : Inhabited (List Types) where
 instance : Inhabited (Dict × Types) where
   default := (default, default)
 
-def Dict.get : Dict → KeyType → Option (Nat × Types)
+def Dict.get : Dict → KeyType → Option Types
   | Dict.empty, _ => default
-  | Dict.insert k l v d, key =>
+  | Dict.insert k v d, key =>
     match k, key with
-    | KeyType.strKey ks, KeyType.strKey keyg => if ks = keyg then some (l, v) else d.get key
-    | KeyType.keywordKey ks, KeyType.keywordKey keyg => if ks = keyg then some (l, v) else d.get key
-    | KeyType.strKey ks, KeyType.keywordKey keyg => if ks = keyg then some (l, v) else d.get key
-    | KeyType.keywordKey ks, KeyType.strKey keyg => if ks = keyg then some (l, v) else d.get key
+    | KeyType.strKey ks, KeyType.strKey keyg => if ks = keyg then some v else d.get key
+    | KeyType.keywordKey ks, KeyType.keywordKey keyg => if ks = keyg then some v else d.get key
+    | KeyType.strKey ks, KeyType.keywordKey keyg => if ks = keyg then some v else d.get key
+    | KeyType.keywordKey ks, KeyType.strKey keyg => if ks = keyg then some v else d.get key
 
 def Dict.keys : Dict → List KeyType
   | Dict.empty => []
-  | Dict.insert k _ _ d =>
+  | Dict.insert k _ d =>
     let restKeys := d.keys
     k :: restKeys
 
 def Dict.values : Dict → List Types
   | Dict.empty => []
-  | Dict.insert _ _ v d =>
+  | Dict.insert _ v d =>
     let restValues := d.values
     v :: restValues
 
 def Dict.remove (d : Dict) (key : KeyType) : Dict :=
   match d with
   | Dict.empty => Dict.empty
-  | Dict.insert k l v rest =>
+  | Dict.insert k v rest =>
     match k, key with
-      | KeyType.strKey ks, KeyType.strKey keyg => if ks = keyg then rest.remove key else Dict.insert k l v (rest.remove key)
-      | KeyType.keywordKey ks, KeyType.keywordKey keyg => if ks = keyg then rest.remove key else Dict.insert k l v (rest.remove key)
-      | KeyType.strKey ks, KeyType.keywordKey keyg => if ks = keyg then rest.remove key else Dict.insert k l v (rest.remove key)
-      | KeyType.keywordKey ks, KeyType.strKey keyg => if ks = keyg then rest.remove key else Dict.insert k l v (rest.remove key)
+      | KeyType.strKey ks, KeyType.strKey keyg => if ks = keyg then rest.remove key else Dict.insert k v (rest.remove key)
+      | KeyType.keywordKey ks, KeyType.keywordKey keyg => if ks = keyg then rest.remove key else Dict.insert k v (rest.remove key)
+      | KeyType.strKey ks, KeyType.keywordKey keyg => if ks = keyg then rest.remove key else Dict.insert k v (rest.remove key)
+      | KeyType.keywordKey ks, KeyType.strKey keyg => if ks = keyg then rest.remove key else Dict.insert k v (rest.remove key)
 
-def Dict.add : Dict → KeyType → Nat → Types → Dict
-  | Dict.empty, key, level, value => Dict.insert key level value Dict.empty
-  | Dict.insert k _ v d, key, level, value =>
+def Dict.add : Dict → KeyType → Types → Dict
+  | Dict.empty, key, value => Dict.insert key value Dict.empty
+  | Dict.insert k v d, key, value =>
     match k, key with
-      | KeyType.strKey ks, KeyType.strKey keyg => if ks = keyg then Dict.insert k level value d else Dict.insert k level v (d.add key level value)
-      | KeyType.keywordKey ks, KeyType.keywordKey keyg => if ks = keyg then Dict.insert k level value d else Dict.insert k level v (d.add key level value)
-      | KeyType.strKey ks, KeyType.keywordKey keyg => if ks = keyg then Dict.insert k level value d else Dict.insert k level v (d.add key level value)
-      | KeyType.keywordKey ks, KeyType.strKey keyg => if ks = keyg then Dict.insert k level value d else Dict.insert k level v (d.add key level value)
+      | KeyType.strKey ks, KeyType.strKey keyg => if ks = keyg then Dict.insert k value d else Dict.insert k v (d.add key value)
+      | KeyType.keywordKey ks, KeyType.keywordKey keyg => if ks = keyg then Dict.insert k value d else Dict.insert k v (d.add key value)
+      | KeyType.strKey ks, KeyType.keywordKey keyg => if ks = keyg then Dict.insert k value d else Dict.insert k v (d.add key value)
+      | KeyType.keywordKey ks, KeyType.strKey keyg => if ks = keyg then Dict.insert k value d else Dict.insert k v (d.add key value)
 
 -- Helper function to fold over all elements in a Dict
-partial def Dict.fold (d : Dict) (init : α) (f : KeyType → Nat → Types → α → α) : α :=
+partial def Dict.fold (d : Dict) (init : α) (f : KeyType → Types → α → α) : α :=
   match d with
   | Dict.empty => init
-  | Dict.insert k l v d' => d'.fold (f k l v init) f
+  | Dict.insert k v d' => d'.fold (f k v init) f
 
--- Function to merge two Dicts
-def Dict.merge (baseDict newDict : Dict) : Dict :=
-  let merged := newDict.fold baseDict (fun key l v acc =>
-    match acc.get key with
-    | some (lBase, _) =>
-      if l > lBase then acc.add key l v else acc
-    | none => acc.add key l v)
-  merged
+-- -- Function to merge two Dicts
+-- def Dict.merge (baseDict newDict : Dict) : Dict :=
+--   let merged := newDict.fold baseDict (fun key v acc =>
+--     match acc.get key with
+--     | some (lBase, _) =>
+--       if l > lBase then acc.add key l v else acc
+--     | none => acc.add key l v)
+--   merged
 
 -- Function to extract the string from a Types.symbolVal
 def getSymbol (t : Types) : Option String :=
@@ -149,7 +148,7 @@ def getKeyword (t : Types) : Option String :=
   | Types.keywordVal key => some key
   | _ => none
 
-def buildDictWithSymbols (ref: Dict) (level: Nat) (keys : List String) (values : List Types) : Dict :=
+def buildDictWithSymbols (ref: Dict) (keys : List String) (values : List Types) : Dict :=
   match keys, values with
   | [], _ => Dict.empty
   | _, [] => Dict.empty
@@ -158,55 +157,70 @@ def buildDictWithSymbols (ref: Dict) (level: Nat) (keys : List String) (values :
     | Types.symbolVal v =>
       let entry := ref.get (KeyType.strKey v)
       match entry with
-      | some (_, v) => v
+      | some v => v
       | none => Types.Nil
     | _ => value
-    let restDict := buildDictWithSymbols ref level keyTail valueTail
-    Dict.insert (KeyType.strKey key) level val restDict
+    let restDict := buildDictWithSymbols ref keyTail valueTail
+    Dict.insert (KeyType.strKey key) val restDict
 
-def buildDict (level: Nat) (keys : List String) (values : List Types) : Dict :=
+def buildDict (keys : List String) (values : List Types) : Dict :=
   match keys, values with
   | [], _ => Dict.empty
   | _, [] => Dict.empty
   | key :: keyTail, value :: valueTail =>
-    let restDict := buildDict level keyTail valueTail
-    Dict.insert (KeyType.strKey key) level value restDict
+    let restDict := buildDict keyTail valueTail
+    Dict.insert (KeyType.strKey key) value restDict
 
-def Env.getLevel : Env → Nat
-  | Env.data l _ => l
+-- Get the current Dict from the Env
+def Env.getDict (env: Env) : IO Dict := do
+  env.data.get
 
-def Env.getDict : Env → Dict
-  | Env.data _ d => d
+-- Perform a key lookup in the current environment and its outer references
+def Env.get (env: Env) (key: KeyType) : IO (Option Types) := do
+  let data ← env.data.get
+  match data.get key with
+  | some value => pure (some value)
+  | none =>
+    -- If not found, iterate through the outer environments
+    let rec searchInOuter (outers: List (IO.Ref Dict)) : IO (Option Types) :=
+      match outers with
+      | [] => pure none  -- No more environments to search
+      | outerRef :: rest => do
+        let outerDict ← outerRef.get
+        match outerDict.get key with
+        | some value => pure (some value)
+        | none => searchInOuter rest  -- Continue searching in the next outer
+    searchInOuter env.outer
 
-def Env.get : Env → KeyType → Option (Nat × Types)
-  | Env.data _ d, key => d.get key
+def Env.getByStr (env: Env) (key: String) : IO (Option Types) := do
+  env.get (KeyType.strKey key)
 
-def Env.getByStr : Env → String → Option (Nat × Types)
-  | Env.data _ d, key => d.get (KeyType.strKey key)
+def Env.getByKeyword (env: Env) (key: String) : IO (Option Types) := do
+  env.get (KeyType.keywordKey key)
 
-def Env.getByKeyword : Env → String → Option (Nat × Types)
-  | Env.data _ d, key => d.get (KeyType.keywordKey key)
+def Env.keys (env: Env) : IO (List KeyType) := do
+  return (← env.getDict).keys
 
-def Env.keys : Env → List KeyType
-  | Env.data _ d => d.keys
+def Env.values (env: Env) : IO (List Types) := do
+  return (← env.getDict).values
 
-def Env.values : Env → List KeyType
-  | Env.data _ d => d.keys
+-- def Env.remove (env: Env) (key: KeyType): Dict :=
+--   env.data.remove key
 
-def Env.remove : Env → KeyType → Dict
-  | Env.data _ d, key => d.remove key
+def Env.add (env: Env) (key: KeyType) (value: Types): IO Env := do
+  let dict := (← env.getDict).add key value
+  env.data.set dict
+  return env
 
-def Env.add : Env → KeyType → Nat → Types → Env
-  | Env.data l d, key, level, value => Env.data l (d.add key level value)
+def Env.new (outer: Env): IO Env := do
+  let ref ← IO.mkRef Dict.empty
+  pure { data := ref, outer := [outer.data] ++ outer.outer }
 
-def Env.increment : Env → Env
-  | Env.data l d => Env.data (l + 1) d
+-- def Env.merge : Env → Env → Env
+--   | Env.data _ d, e2 =>  Env.data e2.getLevel (d.merge e2.getDict)
 
-def Env.merge : Env → Env → Env
-  | Env.data _ d, e2 =>  Env.data e2.getLevel (d.merge e2.getDict)
-
-def Env.mergeDict : Env → Nat → Dict → Env
-  | Env.data _ d, level2, d2 =>  Env.data level2 (d.merge d2)
+-- def Env.mergeDict : Env → Dict → Env
+--   | Env.data _ d, d2 =>  Env.data (d.merge d2)
 
 def Types.toBool: Types -> Bool
   | Types.boolVal v => if v then true else false
@@ -235,8 +249,7 @@ mutual
     | Types.intVal v => s!"{v}"
     | Types.floatVal v => s!"{v}"
     | Types.boolVal v => s!"{v}"
-    | Types.funcVal el => Fun.toString readably el
-    -- | Types.funcVal v => "(" ++ s!"{(Types.toString v)}" ++ ")"
+    | Types.funcVal el => "#function" -- Fun.toString readably el
     | Types.listVal el => s!"({String.intercalate " " (el.map (Types.toString readably))})"
     | Types.dictVal el => "{" ++ s!"{Dict.toString readably el}" ++ "}"
     | Types.Nil => "nil"
@@ -256,7 +269,7 @@ mutual
     | Atom.v v => s!"(atom {v.toString readably})"
     | Atom.withmeta v _ => s!"(atom {v.toString readably})"
 
-  partial def Fun.toString (readably: Bool) (t:Fun) : String :=
+  partial def Fun.toString (readably: Bool) (t: Fun) : String :=
     match t with
     | Fun.userDefined _ params body => "(fn* " ++ s!"{(Types.toString readably params)}" ++ s!"{(Types.toString readably body)}" ++ ")"
     | Fun.macroFn _ params body => "(fn* " ++ s!"{(Types.toString readably params)}" ++ s!"{(Types.toString readably body)}" ++ ")"
@@ -265,33 +278,31 @@ mutual
   partial def Dict.toString (readably: Bool) (d:Dict) : String :=
     match d with
     | Dict.empty => ""
-    | Dict.insert key _ value Dict.empty =>
+    | Dict.insert key value Dict.empty =>
       match key with
       | KeyType.strKey k => s!"\"{k}\" {Types.toString readably value}"
       | KeyType.keywordKey k => s!":{k} {Types.toString readably value}"
-    | Dict.insert key _ value rest =>
+    | Dict.insert key value rest =>
       let restStr := Dict.toString readably rest
       match key with
       | KeyType.strKey k => s!"{restStr} \"{k}\" {Types.toString readably value}"
       | KeyType.keywordKey k => s!"{restStr} :{k} {Types.toString readably value}"
 
-  partial def Dict.toStringWithLevels (readably: Bool) (d:Dict) : String :=
-    match d with
-    | Dict.empty => ""
-    | Dict.insert key l value Dict.empty =>
-      match key with
-      | KeyType.strKey k => s!"\"{k}\" ({l}) {Types.toString readably value}"
-      | KeyType.keywordKey k => s!":{k} ({l}) {Types.toString readably value}"
-    | Dict.insert key l value rest =>
-      let restStr := Dict.toStringWithLevels readably rest
-      match key with
-      | KeyType.strKey k => s!"{restStr} \"{k}\" ({l}) {Types.toString readably value}"
-      | KeyType.keywordKey k => s!"{restStr} :{k} ({l}) {Types.toString readably value}"
-end
+  partial def Env.toString (readably: Bool) (e: Env) : IO String := do
+    let dataDict ← e.data.get
+    let dataStr := dataDict.toString readably
 
-def Env.toString (readably: Bool) (e:Env) : String :=
-  match e with
-  | Env.data l d => s!"level: {l} dict: {d.toStringWithLevels readably}"
+    -- Process each outer environment reference and build the outer string
+    let outerStrs ← e.outer.mapM (fun v => do
+      let outerDict ← v.get
+      pure (outerDict.toString readably))
+
+    -- Concatenate the outer strings
+    let outerStr := String.intercalate ", " outerStrs
+
+    -- Build the final string
+    pure s!"<data: {dataStr} | outer: [{outerStr}]>"
+end
 
 def unwrapEnv (envRef : IO.Ref Env) : IO Env :=
   envRef.get
