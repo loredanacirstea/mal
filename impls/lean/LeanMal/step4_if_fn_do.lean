@@ -29,7 +29,7 @@ mutual
   partial def evalTypes (env : Env) (ast : Types) : IO (Env × Types) := do
     if getDebugEval env then IO.println s!"EVAL:{pr_str true ast}"
     match ast with
-    | Types.symbolVal v   => match env.get (KeyType.strKey v) with
+    | Types.symbolVal v   => match env.getRecursive (KeyType.strKey v) with
       | some (_, vi) => return (env, vi)
       | none => throw (IO.userError s!"'{v}' not found")
     | Types.listVal el    => (evalList env el)
@@ -58,8 +58,8 @@ mutual
           let argVals := normalArgs ++ [Types.listVal variadicArg]
           let argsLevel := if fref.getLevel >= newEnv.getLevel then fref.getLevel + 1 else newEnv.getLevel + 1
 
-          let argsDict := (buildDict argsLevel (keys ++ variadic) argVals)
-          let merged := (newEnv.merge fref).mergeDict argsLevel argsDict
+          let argsEnv := (buildEnv argsLevel (keys ++ variadic) argVals)
+          let merged := (newEnv.merge fref).merge argsEnv
 
           evalTypes merged body
         | Fun.macroFn _ _ _ => throw (IO.userError "macro not implemented")
@@ -90,10 +90,10 @@ mutual
   partial def evalDictInner (env: Env) (lst : Dict) : IO (Env × Dict) := do
     match lst with
       | Dict.empty => return (env, lst)
-      | Dict.insert k _ v restDict =>
+      | Dict.insert k v restDict =>
         let (newEnv, newVal) ← evalTypes env v
         let (updatedEnv, updatedDict) ← evalDictInner newEnv restDict
-        let newDict := Dict.insert k 0 newVal updatedDict
+        let newDict := Dict.insert k newVal updatedDict
         return (updatedEnv, newDict)
 
   partial def evalFuncArgs (env: Env) (args: List Types) : IO (Env × List Types) :=
@@ -194,13 +194,13 @@ mutual
 end
 
 def READ (input : String): Except String Types :=
-  read_str.{u} input
+  read_str input
 
 def PRINT (ast : Types): String :=
   pr_str true ast
 
 def rep (env: Env) (input : String): IO (Env × String) := do
-  match READ.{u} input with
+  match READ input with
   | Except.ok result =>
     try
       let (newenv, res) ← evalTypes env result
@@ -212,7 +212,7 @@ def rep (env: Env) (input : String): IO (Env × String) := do
 def loadMalFns (env: Env) (fndefs: List String): IO (Env × String) := do
   fndefs.foldlM (fun (res : Env × String) fndef => do
     let (ref, msg) := res
-    let (newref, newmsg) ← rep.{u} ref fndef
+    let (newref, newmsg) ← rep ref fndef
     return (newref, s!"{msg}¬{newmsg}")
   ) (env, "")
 
@@ -226,7 +226,7 @@ def repAndPrint (env: Env) (output : String): IO Env := do
   return env
 
 def main : IO Unit := do
-  let (env0, _) ← loadMalFns.{u} (loadFnNativeAll (Env.data 0 Dict.empty)) fnDefs
+  let (env0, _) ← loadMalFns (loadFnNativeAll (Env.data 0 LevelDict.empty KLDict.empty))  fnDefs
   let mut env := env0
   let mut donext := true
   while donext do
@@ -240,5 +240,5 @@ def main : IO Unit := do
     if value.isEmpty then
       donext := false
     else
-      let (newenv, value) ← rep.{u} env value
+      let (newenv, value) ← rep env value
       env ← repAndPrint newenv value

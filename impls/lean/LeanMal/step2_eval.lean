@@ -4,7 +4,7 @@ import LeanMal.printer
 universe u
 
 def READ (input : String): Except String Types :=
-  read_str.{u} input
+  read_str input
 
 def sum (env : Env) (lst: List Types) : IO (Env × Types) := do
   match lst with
@@ -54,7 +54,7 @@ mutual
 
   partial def evalTypes (env : Env) (ast : Types) : IO (Env × Types) := do
     match ast with
-    | Types.symbolVal v   => match env.get (KeyType.strKey v) with
+    | Types.symbolVal v   => match env.getRecursive (KeyType.strKey v) with
       | some (_, vi) => return (env, vi)
       | none    => return (env, Types.symbolVal v )
     | Types.listVal el    => (evalList env el)
@@ -77,8 +77,8 @@ mutual
           let keys: List String := match params with
             | Types.listVal v => v.map fun x => x.toString false
             | _               => []
-          let argsDict := (buildDict 0 keys results)
-          let merged := (newEnv.merge fenv).mergeDict (fenv.getLevel + 1) argsDict
+          let argsEnv := (buildEnv (fenv.getLevel + 1) keys results)
+          let merged := (newEnv.merge fenv).merge argsEnv
           evalTypes merged body
         | Fun.macroFn _ _ _ => throw (IO.userError "macro not implemented")
       | _ => throw (IO.userError s!"`unexpected token, expected: function`")
@@ -103,10 +103,10 @@ mutual
   partial def evalDictInner (env: Env) (lst : Dict) : IO (Env × Dict) := do
     match lst with
       | Dict.empty => return (env, lst)
-      | Dict.insert k _ v restDict =>
+      | Dict.insert k v restDict =>
         let (newEnv, newVal) ← evalTypes env v
         let (updatedEnv, updatedDict) ← evalDictInner newEnv restDict
-        let newDict := Dict.insert k 0 newVal updatedDict
+        let newDict := Dict.insert k newVal updatedDict
         return (updatedEnv, newDict)
 
   partial def evalFuncArgs (env: Env) (args: List Types) : IO (Env × List Types) := do
@@ -121,10 +121,10 @@ def PRINT (ast : Types): String :=
   pr_str true ast
 
 def rep (input : String): IO String := do
-  match READ.{u} input with
+  match READ input with
   | Except.ok result =>
     try
-      let (_, res) ← evalTypes (Env.data 0 Dict.empty) result
+      let (_, res) ← evalTypes (Env.data 0 LevelDict.empty KLDict.empty) result
       return PRINT res
     catch
       | e => return s!"Error: {e}"
@@ -144,5 +144,5 @@ def main : IO Unit := do
     if value.isEmpty then
       donext := false
     else
-      let output ← rep.{u} value
+      let output ← rep value
       IO.println output

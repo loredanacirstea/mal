@@ -100,10 +100,6 @@ mutual
       if !(eqInternal a b strict) then false
       else eqList nrest vrest strict
 
-  -- partial def eqDictKeys (k1: List KeyType) (k2: List KeyType) : Bool :=
-  --   match k1, k2 with
-  --   | KeyType.strKey x,
-
   partial def eqDict (n: Dict) (v: Dict) (strict: Bool) : Bool :=
     match n, v with
     | Dict.empty, Dict.empty => true
@@ -114,7 +110,7 @@ mutual
       else
         keys1.all (fun k =>
           match (d1.get k, d2.get k) with
-          | (some (_, v1), some (_, v2)) => eqInternal v1 v2 strict
+          | (some v1, some v2) => eqInternal v1 v2 strict
           | _ => false)
 
   partial def eqInternal (first: Types) (second: Types) (strict: Bool) : Bool :=
@@ -136,7 +132,7 @@ mutual
       let v := toList vvec
       if n.length != v.length then false
       else eqList n v strict
-    | Types.dictVal n, Types.dictVal v => eqDict n v strict
+    | Types.dictVal n, Types.dictVal v => eqDict n v strict -- mal hash-maps are Dict level 0
     | Types.listVal n, Types.vecVal vvec => if strict then false else
       let v := toList vvec
       if n.length != v.length then false
@@ -181,7 +177,7 @@ def resetAtom (env : Env) (lst: List Types) (args: List Types) : IO (Env × Type
     let atomSymbol := args[0]!
     match atomSymbol with
     | Types.symbolVal sym =>
-      match env.get (KeyType.strKey sym) with
+      match env.getRecursive (KeyType.strKey sym) with
       | none => throw (IO.userError s!"{sym} not found")
       | some (level, _) => match first with
         | Types.atomVal x => match x with
@@ -201,8 +197,8 @@ def prStrInternal (lst: List Types) (printReadably: Bool) (sep: String) : String
 def KEY_DEBUG_EVAL := "DEBUG-EVAL"
 
 def getDebugEval (env : Env): Bool :=
-  match env.get (KeyType.strKey KEY_DEBUG_EVAL) with
-    | some (_, v) => match v with
+  match env.get (KeyType.strKey KEY_DEBUG_EVAL) 0 with
+    | some v => match v with
       | Types.boolVal v => v
       | Types.Nil => false
       | _ => false
@@ -236,12 +232,12 @@ def countFunc(env : Env) (lst: List Types) : IO (Env × Types) := do
       | Types.Nil => return (env, Types.intVal 0)
       | _ => throw (IO.userError "count called on non-sequence")
 
-def readString (lst: List Types) (envir: Env) : IO Types := do
+def readString (lst: List Types) : IO Types := do
   if lst.length < 1 then throw (IO.userError "read-string: 1 arguments required")
   else
     let first := lst[0]!
     match first with
-    | Types.strVal v => match read_types_with_env v envir.getDict with -- Dict.empty
+    | Types.strVal v => match read_types_with_env v with
       | Except.error e => throw (IO.userError e)
       | Except.ok res => return res
     | x => throw (IO.userError s!"unexpected symbol: {x.toString true}, expected: string")
@@ -344,10 +340,10 @@ def makeDictInternal (initialDict : Dict) (lst: List Types) : IO (Dict) := do
     | [] => return (acc, acckeys)
     | (Types.strVal k) :: v :: rest =>
       if acckeys.contains k then return (acc, acckeys)
-      else loop rest (acckeys ++ [k]) (Dict.insert (KeyType.strKey k) 0 v acc)
+      else loop rest (acckeys ++ [k]) (Dict.insert (KeyType.strKey k) v acc)
     | (Types.keywordVal k) :: v :: rest =>
       if acckeys.contains k then return (acc, acckeys)
-      else loop rest (acckeys ++ [k]) (Dict.insert (KeyType.keywordKey k) 0 v acc)
+      else loop rest (acckeys ++ [k]) (Dict.insert (KeyType.keywordKey k) v acc)
     | _ => throw (IO.userError "Invalid list format: Expected alternating string/keyword and value")
   let (v, _) ← loop lst [] initialDict
   return v
@@ -406,11 +402,11 @@ def getDict (env : Env) (lst: List Types) : IO (Env × Types) := do
         match (rest[0]!) with
         | Types.strVal k =>
           match v.get (KeyType.strKey k) with
-          | some (_, val) => return (env, val)
+          | some val => return (env, val)
           | none => return (env, Types.Nil)
         | Types.keywordVal k =>
           match v.get (KeyType.keywordKey k) with
-          | some (_, val) => return (env, val)
+          | some val => return (env, val)
           | none => return (env, Types.Nil)
         | x => throw (IO.userError s!"unexpected symbol: {x.toString true}, expected: keyword or string")
     | Types.Nil => return (env, Types.Nil)
@@ -610,12 +606,8 @@ def setSymbol (env : Env) (name: String) (value: Types): Env :=
 -- used to forward mutated atoms and variables defined by `eval` in the root scope
 def forwardOuterScopeDefs (envSource: Env) (envOuter: Env): Env :=
   envSource.getDict.fold envOuter (fun key l v acc =>
+    -- do not propagate vars defined in current scope (higher level index)
     if l > acc.getLevel then acc
-    else if l < acc.getLevel then acc.add key l v
-    else
-      match acc.get key with
-        | none => acc.add key l v
-        | some (lOuter, _) =>
-          if l != lOuter then acc
-          else acc.add key l v
+    -- propagate vars defined in outer scopes - with <= level index (e.g. defined by eval, mutated atoms)
+    else acc.add key l v
   )

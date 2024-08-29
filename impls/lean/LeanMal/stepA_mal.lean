@@ -29,7 +29,7 @@ mutual
   partial def evalTypes (env : Env) (ast : Types) : IO (Env × Types) := do
     if getDebugEval env then IO.println s!"EVAL:{pr_str true ast}"
     match ast with
-    | Types.symbolVal v   => match env.get (KeyType.strKey v) with
+    | Types.symbolVal v   => match env.getRecursive (KeyType.strKey v) with
       | some (_, vi) => return (env, vi)
       | none => throw (IO.userError s!"'{v}' not found")
     | Types.listVal el    => (evalList env el)
@@ -65,8 +65,8 @@ mutual
           let variadicArg := results.drop keys.length
           let argVals := normalArgs ++ [Types.listVal variadicArg]
           let argsLevel := if fenv.getLevel >= newEnv.getLevel then fenv.getLevel + 1 else newEnv.getLevel + 1
-          let argsDict := (buildDict argsLevel (keys ++ variadic) argVals)
-          let merged := (newEnv.merge fenv).mergeDict argsLevel argsDict
+          let argsEnv := (buildEnv argsLevel (keys ++ variadic) argVals)
+          let merged := (newEnv.merge fenv).merge argsEnv
           evalTypes merged body
         | Fun.macroFn fenv params body =>
           let allkeys: List String := match params with
@@ -77,8 +77,8 @@ mutual
           let variadicArg := args.drop keys.length
           let argVals := normalArgs ++ [Types.listVal variadicArg]
           let argsLevel := if fenv.getLevel >= env.getLevel then fenv.getLevel + 1 else env.getLevel + 1
-          let argsDict := (buildDict argsLevel (keys ++ variadic) argVals)
-          let merged := (env.merge fenv).mergeDict argsLevel argsDict
+          let argsEnv := (buildEnv argsLevel (keys ++ variadic) argVals)
+          let merged := (env.merge fenv).merge argsEnv
           let (_, newast) ← evalTypes merged body
           evalTypes env newast
       | _ => throw (IO.userError s!"`unexpected token, expected: function`")
@@ -116,10 +116,10 @@ mutual
   partial def evalDictInner (env: Env) (lst : Dict) : IO (Env × Dict) := do
     match lst with
       | Dict.empty => return (env, lst)
-      | Dict.insert k _ v restDict =>
+      | Dict.insert k v restDict =>
         let (newEnv, newVal) ← evalTypes env v
         let (updatedEnv, updatedDict) ← evalDictInner newEnv restDict
-        let newDict := Dict.insert k 0 newVal updatedDict
+        let newDict := Dict.insert k newVal updatedDict
         return (updatedEnv, newDict)
 
   partial def evalFuncArgs (env: Env) (args: List Types) : IO (Env × List Types) :=
@@ -234,8 +234,8 @@ mutual
                       if catchBody.length < 2 then throw (IO.userError "try*: unexpected syntax")
                       else
                         let toeval := catchBody[2]!
-                        let built := buildDictWithSymbols env.getDict env.getLevel [errorSymbol] [err]
-                        let merged := env.mergeDict (env.getLevel + 1) built
+                        let built := buildEnv2 env [errorSymbol] [err]
+                        let merged := env.mergeDict built.getDict (env.getLevel + 1) built.getDictKeys
                         evalTypes merged toeval
                     | _ => throw (IO.userError s!"unexpected return type, expected: symbol")
                 else throw evalErr
@@ -253,7 +253,7 @@ mutual
     | Types.symbolVal sym =>
       match fn with
       | Types.funcVal _ =>
-        match env.get (KeyType.strKey sym) with
+        match env.getRecursive (KeyType.strKey sym) with
         | none => throw (IO.userError s!"{sym} not found")
         | some (level, _) => match first with
           | Types.atomVal x => match x with
@@ -274,7 +274,7 @@ mutual
     else
       let ast := lst[0]!
       -- any new variables are defined on level 0
-      let env0 := Env.data 0 env.getDict
+      let env0 := Env.data 0 env.getDict env.getDictKeys
       evalTypes env0 ast
 
   partial def starts_with (lst: List Types) (symb: String) : Bool :=
@@ -389,7 +389,7 @@ mutual
       | "println" => printlnFunc env results
       | "eval" => eval env results
       | "read-string" =>
-      let res ← readString results env -- readString results Dict.empty
+      let res ← readString results
       return (env, res)
       | "time-ms" => throw (IO.userError "Not implemented")
       | "meta" => throw (IO.userError  "Not implemented")
@@ -436,13 +436,13 @@ mutual
 end
 
 def READ (input : String): Except String Types :=
-  read_str.{u} input
+  read_str input
 
 def PRINT (ast : Types): String :=
   pr_str true ast
 
 def rep (env: Env) (input : String): IO (Env × String) := do
-  match READ.{u} input with
+  match READ input with
   | Except.ok result =>
     try
       let (newenv, res) ← evalTypes env result
@@ -454,7 +454,7 @@ def rep (env: Env) (input : String): IO (Env × String) := do
 def loadMalFns (env: Env) (fndefs: List String): IO (Env × String) := do
   fndefs.foldlM (fun (res : Env × String) fndef => do
     let (ref, msg) := res
-    let (newref, newmsg) ← rep.{u} ref fndef
+    let (newref, newmsg) ← rep ref fndef
     return (newref, s!"{msg}¬{newmsg}")
   ) (env, "")
 
@@ -471,16 +471,19 @@ def repAndPrint (env: Env) (output : String): IO Env := do
   return env
 
 def main (args : List String) : IO Unit := do
-  let (env0, _) ← loadMalFns.{u} (loadFnNativeAll (Env.data 0 Dict.empty)) fnDefs
-  let astArgs := ((args.drop 1).map (fun arg => Types.strVal arg))
-  let mut env := setSymbol env0 "*ARGV*" (Types.listVal astArgs)
+  let (env0, _) ← loadMalFns (loadFnNativeAll (Env.data 0 LevelDict.empty KLDict.empty)) fnDefs
 
-  if args.length > 0 then
-    let (_, val) ← rep.{u} env s!"(load-file \"{args[0]!}\")"
-    IO.println val
+  let mut env := setSymbol env0 "*ARGV*" (Types.listVal [])
+
+  if args.length > 2 then
+    let astArgs := ((args.drop 1).map (fun arg => Types.strVal arg))
+    let newenv := setSymbol env0 "*ARGV*" (Types.listVal astArgs)
+    let (_, _) ← rep newenv s!"(load-file \"{args[0]!}\")"
+    IO.Process.exit 0
+    return
   else
 
-  let (_, val) ← rep.{u} env s!"(println (str \"Mal [\" *host-language* \"]\"))"
+  let (_, val) ← rep env s!"(println (str \"Mal [\" *host-language* \"]\"))"
   IO.println val
 
   let mut donext := true
@@ -495,5 +498,5 @@ def main (args : List String) : IO Unit := do
     if value.isEmpty then
       donext := false
     else
-      let (newenv, value) ← rep.{u} env value
+      let (newenv, value) ← rep env value
       env ← repAndPrint newenv value
