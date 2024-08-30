@@ -203,11 +203,30 @@ def LevelDict.add : LevelDict → KeyType → Nat → Types → LevelDict
       | KeyType.keywordKey ks, KeyType.strKey keyg => if ks = keyg && l = level then LevelDict.insert k level value d else LevelDict.insert k l v (d.add key level value)
 
 -- Helper function to fold over all elements in a LevelDict and update the baseKeyLevelsDict
-partial def LevelDict.fold (d : LevelDict) (acc : Env)
+def LevelDict.fold (d : LevelDict) (acc : Env)
     (f : KeyType → Nat → Types → Env → Env) : Env :=
   match d with
   | LevelDict.empty => acc
   | LevelDict.insert k l v d' => d'.fold (f k l v acc) f
+
+-- Helper function to fold over all elements in a LevelDict for a given level
+def LevelDict.foldLevel (d : LevelDict) (level : Nat) (acc : α)
+    (f : KeyType → Types → α → α) : α :=
+  match d with
+  | LevelDict.empty => acc  -- Base case: empty LevelDict returns the accumulator
+  | LevelDict.insert k l v d' =>
+    if l = level then
+      -- If the level matches, apply the function `f` to the key-value pair and continue folding
+      d'.foldLevel level (f k v acc) f
+    else
+      -- Otherwise, continue folding without applying the function
+      d'.foldLevel level acc f
+
+def LevelDict.foldWithRes (d : LevelDict) (acc : Env × Types)
+    (f : KeyType → Nat → Types → Env × Types → Env × Types) : Env × Types :=
+  match d with
+  | LevelDict.empty => acc
+  | LevelDict.insert k l v d' => d'.foldWithRes (f k l v acc) f
 
 -- Function to extract the string from a Types.symbolVal
 def getSymbol (t : Types) : Option String :=
@@ -277,6 +296,56 @@ def Env.merge (baseEnv : Env) (overwriteEnv : Env) : Env :=
 
 def Env.mergeDict (baseEnv : Env) (d2: LevelDict) (level2: Nat) (klDict: KLDict): Env :=
   baseEnv.merge (Env.data level2 d2 klDict)
+
+-- Fold function for Env that iterates through KLDict first and then LevelDict
+def Env.fold (env: Env) (acc: Env) (f: KeyType → Nat → Types → Env → Env) : Env :=
+  let klDict := env.getDictKeys
+  let leveldict := env.getDict
+
+  -- Iterate through KLDict to get the last modified level index for each key
+  let rec foldKLDict (kld: KLDict) (acc: Env) : Env :=
+    match kld with
+    | KLDict.empty => acc
+    | KLDict.insert _ level rest =>
+      let acc := leveldict.foldLevel level acc (fun key value acc =>
+        f key level value acc  -- Apply function f
+      )
+      -- leveldict.foldLevel level acc (fun key value acc =>
+      --   match leveldict.get key level with
+      --   | some v => f key level v acc  -- Apply function f
+      --   | none => acc
+      -- )
+      -- Continue folding the rest of KLDict
+      foldKLDict rest acc
+  -- Start folding from KLDict
+  foldKLDict klDict acc
+
+def Env.foldWithRes1 (env: Env) (acc: Env × Types) (f: KeyType → Nat → Types → Env × Types → Env × Types) : Env × Types :=
+  let klDict := env.getDictKeys
+  let leveldict := env.getDict
+
+  -- Iterate through KLDict to get the last modified level index for each key
+  let rec foldKLDict (kld: KLDict) (acc: Env × Types) : Env × Types :=
+    match kld with
+    | KLDict.empty => acc
+    | KLDict.insert key level rest =>
+      let newacc := match leveldict.get key level with
+      | some v => f key level v acc  -- Apply function f
+      | none => acc
+      foldKLDict rest newacc
+  foldKLDict klDict acc
+
+def Env.foldWithRes (envsource: Env) (acc: Env × Types) (f: KeyType → Nat → Types → Env × Types → Env × Types) : Env × Types :=
+  -- Iterate through KLDict to get the last modified level index for each key
+  let rec foldKLDict (kld: KLDict) (envsource: Env) (acc: Env × Types) : Env × Types :=
+    match kld with
+    | KLDict.empty => acc
+    | KLDict.insert key level rest =>
+      let newacc := match envsource.getDict.get key level with
+      | some v => f key level v acc  -- Apply function f
+      | none => acc
+      foldKLDict rest envsource newacc
+  foldKLDict envsource.getDictKeys envsource acc
 
 def buildEnv (level: Nat) (keys : List String) (values : List Types) : Env :=
   match keys, values with

@@ -40,7 +40,8 @@ mutual
   partial def evalFunc (env: Env) (head : Types) (args : List Types) : IO (Env × Types) := do
     let (env2, fn) ← evalTypes env head
     let (fref, res) ← evalFuncVal env2 fn args
-    return ((forwardOuterScopeDefs fref env), res)
+    -- return ((forwardOuterScopeDefs6 fref env), res)
+    return forwardOuterScopeDefs7 fref env res
 
   partial def evalFuncVal (env: Env) (fn: Types) (args: List Types) : IO (Env × Types) := do
     -- first execute each function argument - reduce computation

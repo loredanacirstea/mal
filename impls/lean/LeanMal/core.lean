@@ -604,10 +604,53 @@ def setSymbol (env : Env) (name: String) (value: Types): Env :=
 -- forwards mutated variables defined in outer scopes
 -- outer scopes always have a lower level index
 -- used to forward mutated atoms and variables defined by `eval` in the root scope
-def forwardOuterScopeDefs (envSource: Env) (envOuter: Env): Env :=
+def forwardOuterScopeDefs (envSource: Env) (envOuter: Env) : Env :=
   envSource.getDict.fold envOuter (fun key l v acc =>
     -- do not propagate vars defined in current scope (higher level index)
     if l > acc.getLevel then acc
     -- propagate vars defined in outer scopes - with <= level index (e.g. defined by eval, mutated atoms)
     else acc.add key l v
+  )
+
+def forwardOuterScopeDefs2 (envSource: Env) (envOuter: Env) (res : Types): (Env × Types) :=
+  (envSource.getDict.fold envOuter (fun key l v acc =>
+    -- do not propagate vars defined in current scope (higher level index)
+    if l > acc.getLevel then acc
+    -- propagate vars defined in outer scopes - with <= level index (e.g. defined by eval, mutated atoms)
+    else acc.add key l v
+  ), res)
+
+def forwardOuterScopeDefs3 (envSource: Env) (envOuter: Env) (res : Types): (Env × Types) :=
+  (envOuter, res)
+
+def forwardOuterScopeDefs4 (envSource: Env) (envOuter: Env) (res : Types) : (Env × Types) :=
+  let envMerged := envSource.getDict.fold envOuter (fun key l v acc =>
+    -- Only propagate variables defined in outer scopes (with a lower or equal level index)
+    if l > acc.getLevel then acc
+    else acc.add key l v
+  )
+  (envMerged, res)
+
+def forwardOuterScopeDefs5 (envSource: Env) (envOuter: Env) (res : Types) : (Env × Types) :=
+  envSource.getDict.foldWithRes (envOuter, res) (fun key l v acc =>
+    -- Only propagate variables defined in outer scopes (with a lower or equal level index)
+    let (accenv, res) := acc
+    if l > accenv.getLevel then acc
+    else (accenv.add key l v, res)
+  )
+
+def forwardOuterScopeDefs6 (envSource: Env) (envOuter: Env) : Env :=
+  envSource.fold envOuter (fun key l v acc =>
+    -- do not propagate vars defined in current scope (higher level index)
+    if l > acc.getLevel then acc
+    -- propagate vars defined in outer scopes - with <= level index (e.g. defined by eval, mutated atoms)
+    else acc.add key l v
+  )
+
+def forwardOuterScopeDefs7 (envSource: Env) (envOuter: Env) (res : Types) : (Env × Types) :=
+  envSource.foldWithRes (envOuter, res) (fun key l v acc =>
+    -- Only propagate variables defined in outer scopes (with a lower or equal level index)
+    let (accenv, res) := acc
+    if l > accenv.getLevel then acc
+    else (accenv.add key l v, res)
   )
