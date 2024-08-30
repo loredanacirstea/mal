@@ -494,7 +494,7 @@ def main (args : List String) : IO Unit := do
   let (env0, _) ← loadMalFns (loadFnNativeAll (Env.data 0 LevelDict.empty KLDict.empty))  fnDefs
   let env := setSymbol env0 "*ARGV*" (Types.listVal [])
 
-  if args.length > 2 then do
+  if args.length > 0 then do
     let astArgs := ((args.drop 1).map (fun arg => Types.strVal arg))
     let newenv := setSymbol env0 "*ARGV*" (Types.listVal astArgs)
     let (_, _) ← rep newenv s!"(load-file \"{args[0]!}\")"
