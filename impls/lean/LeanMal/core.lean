@@ -132,7 +132,7 @@ mutual
       let v := toList vvec
       if n.length != v.length then false
       else eqList n v strict
-    | Types.dictVal n, Types.dictVal v => eqDict n v strict -- mal hash-maps are Dict level 0
+    | Types.dictVal n, Types.dictVal v => eqDict n v strict
     | Types.listVal n, Types.vecVal vvec => if strict then false else
       let v := toList vvec
       if n.length != v.length then false
