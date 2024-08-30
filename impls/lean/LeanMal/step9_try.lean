@@ -466,20 +466,10 @@ def repAndPrint (env: Env) (output : String): IO Env := do
   else IO.println output
   return env
 
-def main (args : List String) : IO Unit := do
-  let (env0, _) ← loadMalFns (loadFnNativeAll (Env.data 0 LevelDict.empty KLDict.empty))  fnDefs
-
-  let mut env := setSymbol env0 "*ARGV*" (Types.listVal [])
-
-  if args.length > 2 then
-    let astArgs := ((args.drop 1).map (fun arg => Types.strVal arg))
-    let newenv := setSymbol env0 "*ARGV*" (Types.listVal astArgs)
-    let (_, _) ← rep newenv s!"(load-file \"{args[0]!}\")"
-    IO.Process.exit 0
-    return
-  else
-
-  let mut donext := true
+def reploop (inienv: Env) : IO Unit := do
+  let mut donext := false
+  let mut env := inienv
+  donext := true
   while donext do
     IO.print "user> "
     let stdin ← IO.getStdin
@@ -493,3 +483,14 @@ def main (args : List String) : IO Unit := do
     else
       let (newenv, value) ← rep env value
       env ← repAndPrint newenv value
+
+def main (args : List String) : IO Unit := do
+  let (env0, _) ← loadMalFns (loadFnNativeAll (Env.data 0 LevelDict.empty KLDict.empty))  fnDefs
+  let env := setSymbol env0 "*ARGV*" (Types.listVal [])
+
+  if args.length > 2 then do
+    let astArgs := ((args.drop 1).map (fun arg => Types.strVal arg))
+    let newenv := setSymbol env0 "*ARGV*" (Types.listVal astArgs)
+    let (_, _) ← rep newenv s!"(load-file \"{args[0]!}\")"
+    IO.Process.exit 0
+  else reploop env
