@@ -134,7 +134,7 @@ mutual
         | _ => throw (IO.userError s!"def! unexpected token, expected: symbol")
 
   partial def evalDefMacro (env: Env) (args : List Types) : IO (Env × Types) := do
-    if args.length < 2 then throw (IO.userError "def! unexpected syntax")
+    if args.length < 2 then throw (IO.userError "defmacro! unexpected syntax")
     else
       let key := args[0]!
       let body := args[1]!
@@ -148,8 +148,9 @@ mutual
             let refResult := newEnv.add (KeyType.strKey v) env.getLevel value
             return (refResult, value)
           | Fun.userDefined fref params body =>
-            let refResult := newEnv.add (KeyType.strKey v) env.getLevel (Types.funcVal (Fun.macroFn fref params body))
-            return (refResult, value)
+            let res := (Types.funcVal (Fun.macroFn fref params body))
+            let refResult := newEnv.add (KeyType.strKey v) env.getLevel res
+            return (refResult, res)
           | _ => throw (IO.userError s!"defmacro!: unexpected builtin function")
         | x => throw (IO.userError s!"unexpected token type: {x.toString true}, expected: function")
       | _ => throw (IO.userError s!"def! unexpected token, expected: symbol")
@@ -307,6 +308,17 @@ mutual
             | _ => return (env, Types.boolVal false)
           | Types.atomVal _ => match name with
             | "atom?" => return (env, Types.boolVal true)
+            | _ => return (env, Types.boolVal false)
+          | Types.funcVal func =>
+            match name with
+            | "fn?" => match func with
+              | Fun.builtin _ => return (env, Types.boolVal true)
+              | Fun.userDefined _ _ _ => return (env, Types.boolVal true)
+              | Fun.macroFn _ _ _ =>  return (env, Types.boolVal false)
+            | "macro?" => match func with
+              | Fun.builtin _ => return (env, Types.boolVal false)
+              | Fun.userDefined _ _ _ => return (env, Types.boolVal false)
+              | Fun.macroFn _ _ _ => return (env, Types.boolVal true)
             | _ => return (env, Types.boolVal false)
           | _   => return (env, Types.boolVal false)
         | _   => throw (IO.userError s!"'{name}' not found")
