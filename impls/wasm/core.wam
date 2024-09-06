@@ -125,7 +125,7 @@
   )
 
   (func $core_readline (param $args i32) (result i32)
-    (LET $line (STATIC_ARRAY 201)
+    (LET $line (STATIC_ARRAY 1024)
          $mv 0)
     (if (i32.eqz ($readline ($to_String ($MEM_VAL1_ptr $args)) $line))
       (return ($INC_REF (global.get $NIL))))
@@ -468,7 +468,7 @@
     (LET $f         ($MEM_VAL1_ptr $args)
          $rest_args ($MEM_VAL1_ptr ($MEM_VAL0_ptr $args))
          $f_args    0
-         $res       ($MAP_LOOP_START (global.get $LIST_T)) 
+         $res       ($MAP_LOOP_START (global.get $LIST_T))
          ;; push MAP_LOOP stack
          $ret       $res
          $current   $res
